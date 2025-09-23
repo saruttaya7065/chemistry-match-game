@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>สาร-สูตรคู่ใจ 🎨</title>
+<style>
+body {
+  font-family: "Comic Sans MS", cursive;
+  background: #fff8e1;
+  margin: 0;
+  padding: 20px;
+  text-align: center;
+}
+h1 {
+  font-size: 2.2em;
+  color: #ff6f61;
+  text-shadow: 2px 2px #b39ddb;
+}
+.top-panel {
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+}
+#score, #timer { font-size: 1.2em; font-weight: bold; }
+#restart {
+  padding: 10px 20px;
+  font-size: 16px;
+  background: #ffb347;
+  border: 3px solid #000;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 #000;
+}
+#restart:hover { background: #ffe066; }
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+  justify-content: center;
+  margin-top: 10px;
+}
+.card {
+  border-radius: 12px;
+  padding: 18px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 16px;
+  text-align: center;
+  box-shadow: 4px 4px 0 #000;
+  border: 3px solid #000;
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s;
+}
+.card:hover { transform: scale(1.1) rotate(-2deg); }
+
+/* Pop Art effect */
+.card::before {
+  content: "";
+  position: absolute;
+  top:0; left:0; width:100%; height:100%;
+  background: radial-gradient(circle, rgba(255,255,255,0.15) 2px, transparent 2px);
+  background-size: 10px 10px;
+  pointer-events:none;
+  animation: popDots 1s infinite linear;
+}
+.card::after {
+  content:"";
+  position:absolute; top:0; left:0; width:100%; height:100%;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(255,255,255,0.1),
+    rgba(255,255,255,0.1) 2px,
+    transparent 2px,
+    transparent 4px
+  );
+  pointer-events:none;
+  animation: popLines 1.5s infinite linear;
+}
+@keyframes popDots { 0% { background-position: 0 0; } 100% { background-position: 20px 20px; } }
+@keyframes popLines { 0% { background-position: 0 0; } 100% { background-position: 20px 20px; } }
+
+.disabled { background: #bbb !important; cursor: default; opacity: 0.6; }
+
+#overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 2em;
+  text-shadow: 3px 3px #000;
+  flex-direction: column;
+}
+@keyframes shake {
+  0% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  50% { transform: translateX(5px); }
+  75% { transform: translateX(-5px); }
+  100% { transform: translateX(0); }
+}
+.shake { animation: shake 0.3s; }
+</style>
+</head>
+<body>
+
+<h1>สาร-สูตรคู่ใจ 🎨</h1>
+
+<div class="top-panel">
+  <div>จับคู่ถูก: <span id="score">0</span>/15</div>
+  <div>เวลา: <span id="timer">90</span> วินาที</div>
+  <button id="restart" onclick="buildBoard()">🔄 เริ่มใหม่</button>
+</div>
+
+<div id="board" class="board"></div>
+<div id="overlay">
+  <div id="overlayText">🎊 ยินดีด้วย! 🎊</div>
+  <button onclick="buildBoard()" style="margin-top:20px; padding:10px 20px; font-size:16px;">เริ่มใหม่</button>
+</div>
+
+<script>
+// ข้อมูลสาร
+const pool = [
+  {id:1,name:"น้ำ",formula:"H2O"},
+  {id:2,name:"โซเดียมคลอไรด์",formula:"NaCl"},
+  {id:3,name:"คาร์บอนไดออกไซด์",formula:"CO2"},
+  {id:4,name:"มีเทน",formula:"CH4"},
+  {id:5,name:"แอมโมเนีย",formula:"NH3"},
+  {id:6,name:"เอทานอล",formula:"C2H5OH"},
+  {id:7,name:"กลูโคส",formula:"C6H12O6"},
+  {id:8,name:"กรดไฮโดรคลอริก",formula:"HCl"},
+  {id:9,name:"กรดซัลฟิวริก",formula:"H2SO4"},
+  {id:10,name:"แคลเซียมคาร์บอเนต",formula:"CaCO3"},
+  {id:11,name:"โซเดียมไบคาร์บอเนต",formula:"NaHCO3"},
+  {id:12,name:"ออกซิเจน",formula:"O2"},
+  {id:13,name:"ไนโตรเจน",formula:"N2"},
+  {id:14,name:"กรดอะซิติก",formula:"CH3COOH"},
+  {id:15,name:"แมกนีเซียมไฮดรอกไซด์",formula:"Mg(OH)2"}
+];
+
+let selected=null;
+let score=0;
+let time=90;
+let timerInterval=null;
+let timerRunning=false;
+const colors = ["#ff6f61","#ffb347","#ffe066","#88d18a","#6ec1e4","#b39ddb"];
+
+const boardEl=document.getElementById("board");
+const scoreEl=document.getElementById("score");
+const timerEl=document.getElementById("timer");
+const overlay=document.getElementById("overlay");
+const overlayText=document.getElementById("overlayText");
+
+function shuffle(arr){ return arr.sort(()=>Math.random()-0.5); }
+
+function playSound(type){
+  const ctx=new (window.AudioContext||window.webkitAudioContext)();
+  const osc=ctx.createOscillator();
+  const gain=ctx.createGain();
+  osc.connect(gain); gain.connect(ctx.destination);
+  if(type==="click"){ osc.type="sine"; osc.frequency.value=300; }
+  if(type==="correct"){ osc.type="triangle"; osc.frequency.value=900; }
+  if(type==="wrong"){ osc.type="sawtooth"; osc.frequency.value=180; }
+  if(type==="win"){ 
+    osc.type="square"; 
+    let now=ctx.currentTime; 
+    osc.frequency.setValueAtTime(440,now); 
+    osc.frequency.setValueAtTime(660,now+0.2); 
+    osc.frequency.setValueAtTime(880,now+0.4);
+  }
+  osc.start();
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.4);
+  osc.stop(ctx.currentTime+0.6);
+}
+
+function getContrastYIQ(hexcolor){
+  hexcolor=hexcolor.replace("#","");
+  let r=parseInt(hexcolor.substr(0,2),16);
+  let g=parseInt(hexcolor.substr(2,2),16);
+  let b=parseInt(hexcolor.substr(4,2),16);
+  let yiq = ((r*299)+(g*587)+(b*114))/1000;
+  return (yiq>=128)?"black":"white";
+}
+
+function buildBoard(){
+  boardEl.innerHTML="";
+  score=0; scoreEl.textContent=score;
+  time=90; timerEl.textContent=time;
+  overlay.style.display="none";
+  selected=null;
+  timerRunning=false;
+  if(timerInterval) clearInterval(timerInterval);
+
+  let cards=[];
+  pool.forEach((p,i)=>{
+    let color = colors[i % colors.length];
+    cards.push({id:p.id,type:"name",text:p.name,color:color});
+    cards.push({id:p.id,type:"formula",text:p.formula,color:color});
+  });
+
+  shuffle(cards).forEach(c=>{
+    let el=document.createElement("div");
+    el.className="card";
+    el.style.background=c.color;
+    el.style.color=getContrastYIQ(c.color)=="black"?"#000":"#fff";
+    el.textContent=c.text;
+    el.dataset.id=c.id;
+    el.dataset.type=c.type;
+    el.onclick=()=>pick(el);
+    boardEl.appendChild(el);
+  });
+}
+
+function pick(el){
+  if(!timerRunning){ startTimer(); timerRunning=true; }
+  if(el.classList.contains("disabled")) return;
+  playSound("click");
+
+  if(!selected){ selected=el; el.style.borderColor="#000"; return; }
+  if(selected===el){ selected.style.borderColor="#000"; selected=null; return; }
+
+  if(selected.dataset.id===el.dataset.id && selected.dataset.type!==el.dataset.type){
+    playSound("correct");
+    selected.classList.add("disabled");
+    el.classList.add("disabled");
+    score++; scoreEl.textContent=score;
+    if(score===pool.length){ win(true); }
+  } else {
+    playSound("wrong");
+    selected.classList.add("shake"); el.classList.add("shake");
+    setTimeout(()=>{ selected.classList.remove("shake"); el.classList.remove("shake"); },300);
+  }
+  selected.style.borderColor="#000";
+  selected=null;
+}
+
+function startTimer(){
+  timerInterval = setInterval(()=>{
+    time--;
+    timerEl.textContent=time;
+    if(time<=0){ clearInterval(timerInterval); win(false); }
+  },1000);
+}
+
+function win(completed){
+  if(timerInterval) clearInterval(timerInterval);
+  if(completed){ playSound("win"); overlayText.textContent = "🎊 ยินดีด้วย! คุณจับคู่ครบแล้ว 🎊"; }
+  else { overlayText.textContent = "⏰ หมดเวลา! ลองอีกครั้ง!"; }
+  overlay.style.display="flex";
+}
+
+buildBoard();
+</script>
+</body>
+</html>
